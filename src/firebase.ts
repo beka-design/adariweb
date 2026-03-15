@@ -1,21 +1,28 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import firebaseAppletConfig from '../firebase-applet-config.json';
 
-// Use environment variables if available (Vercel/Production), 
-// otherwise fallback to the local config file (AI Studio/Development)
+// Safely attempt to load the local config file using Vite's glob import.
+// This will NOT throw an error if the file is missing (e.g., on Vercel).
+const configFiles = import.meta.glob('../firebase-applet-config.json', { eager: true });
+const localConfig = (configFiles['../firebase-applet-config.json'] as any)?.default || {};
+
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseAppletConfig.apiKey,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseAppletConfig.authDomain,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseAppletConfig.projectId,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseAppletConfig.storageBucket,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseAppletConfig.messagingSenderId,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseAppletConfig.appId,
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseAppletConfig.measurementId || ""
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || localConfig.apiKey,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || localConfig.authDomain,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || localConfig.projectId,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || localConfig.storageBucket,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || localConfig.messagingSenderId,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || localConfig.appId,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || localConfig.measurementId || ""
 };
 
-const firestoreDatabaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseAppletConfig.firestoreDatabaseId;
+const firestoreDatabaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || localConfig.firestoreDatabaseId;
+
+// Final check to help you debug in the browser console
+if (!firebaseConfig.apiKey && import.meta.env.DEV) {
+    console.warn("Firebase API Key is missing. If you are developing locally, ensure firebase-applet-config.json exists or .env is configured.");
+}
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
