@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0066FF;
+  --color-secondary: #FF8800;
+  --color-glass-bg: rgba(255, 255, 255, 0.1);
+  --color-glass-border: rgba(255, 255, 255, 0.2);
+}
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-white min-h-screen;
+    background-image: 
+      radial-gradient(circle at 20% 20%, rgba(0, 102, 255, 0.15) 0%, transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(255, 136, 0, 0.15) 0%, transparent 40%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-xl;
+  }
+  
+  .glass-button {
+    @apply px-6 py-3 rounded-xl font-medium transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .glass-button-primary {
+    @apply bg-primary hover:bg-primary/80 text-white shadow-lg shadow-primary/20 px-6 py-3 rounded-xl font-medium transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .glass-button-secondary {
+    @apply bg-secondary hover:bg-secondary/80 text-white shadow-lg shadow-secondary/20 px-6 py-3 rounded-xl font-medium transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .glass-button-outline {
+    @apply border border-white/20 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-medium transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .glass-input {
+    @apply w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary/50 transition-colors placeholder:text-white/30;
+  }
+}

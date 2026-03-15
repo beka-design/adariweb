@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information and subscription status.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "grade": { "type": "string", "description": "Grade level (9, 10, 11, 12)" },
+        "subscriptionStatus": { "type": "string", "enum": ["free", "basic", "premium"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "QuizResult": {
+      "title": "Quiz Result",
+      "description": "Results of a quiz taken by a student.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "subject": { "type": "string" },
+        "grade": { "type": "string" },
+        "score": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "answers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "questionId": { "type": "string" },
+              "userAnswer": { "type": "string" },
+              "isCorrect": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "required": ["userId", "subject", "score", "timestamp"]
+    },
+    "PaymentConfirmation": {
+      "title": "Payment Confirmation",
+      "description": "Payment verification request with screenshot.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "plan": { "type": "string", "enum": ["basic", "premium"] },
+        "cloudinaryImageUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "cloudinaryImageUrl", "status", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Individual user profiles."
+    },
+    "quizResults/{resultId}": {
+      "schema": "QuizResult",
+      "description": "History of quiz attempts."
+    },
+    "payments/{paymentId}": {
+      "schema": "PaymentConfirmation",
+      "description": "Payment verification records."
+    }
+  }
+}

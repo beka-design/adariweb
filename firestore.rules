@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields: uid, email, displayName, grade, subscriptionStatus, createdAt
+    //
+    // Collection: quizResults
+    // Fields: userId, subject, grade, score, totalQuestions, timestamp, answers
+    //
+    // Collection: payments
+    // Fields: userId, name, email, plan, cloudinaryImageUrl, status, timestamp
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'subscriptionStatus', 'createdAt']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.displayName is string &&
+             data.subscriptionStatus in ['free', 'basic', 'premium'] &&
+             data.createdAt is string;
+    }
+
+    function isValidQuizResult(data) {
+      return data.keys().hasAll(['userId', 'subject', 'grade', 'score', 'totalQuestions', 'timestamp', 'answers']) &&
+             data.userId == request.auth.uid &&
+             data.score is number &&
+             data.totalQuestions is number &&
+             data.answers is list;
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['userId', 'plan', 'cloudinaryImageUrl', 'status', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.status == 'pending';
+    }
+
+    // Rules
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                    request.resource.data.subscriptionStatus == resource.data.subscriptionStatus; // Users can't upgrade themselves
+    }
+
+    match /quizResults/{resultId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidQuizResult(request.resource.data);
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidPayment(request.resource.data);
+    }
+
+    // Admin check (simplified for now, can be expanded)
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.email == "berekettesfaye137@gmail.com";
+    }
+  }
+}
