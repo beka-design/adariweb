@@ -35,6 +35,7 @@ export interface QuizResult {
 }
 
 export interface PaymentConfirmation {
+  email: string;
   id?: string;
   userId: string;
   name: string;

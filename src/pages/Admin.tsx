@@ -5,19 +5,72 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { Navigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { type PaymentConfirmation } from '../types';
-import { Check, X, ExternalLink, Clock, User } from 'lucide-react';
+import { Check, X, ExternalLink, Clock, User, AlertTriangle } from 'lucide-react';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  return new Error(JSON.stringify(errInfo));
+};
 
 const Admin: React.FC = () => {
   const [user] = useAuthState(auth);
   const [payments, setPayments] = useState<PaymentConfirmation[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const isAdmin = user?.email === 'berekettesfaye137@gmail.com';
 
   useEffect(() => {
     const fetchPayments = async () => {
       if (!isAdmin) return;
+      setLoading(true);
       try {
         const q = query(
           collection(db, 'payments'),
@@ -27,7 +80,7 @@ const Admin: React.FC = () => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentConfirmation));
         setPayments(data);
       } catch (err) {
-        console.error('Error fetching payments:', err);
+        handleFirestoreError(err, OperationType.LIST, 'payments');
       } finally {
         setLoading(false);
       }
@@ -39,22 +92,34 @@ const Admin: React.FC = () => {
   const handleApprove = async (payment: PaymentConfirmation) => {
     if (!payment.id || !payment.userId) return;
     setProcessingId(payment.id);
+    setError(null);
     try {
+      const { writeBatch, doc } = await import('firebase/firestore');
+      const batch = writeBatch(db);
+
       // 1. Update payment status
-      await updateDoc(doc(db, 'payments', payment.id), {
-        status: 'approved'
-      });
+      const paymentRef = doc(db, 'payments', payment.id);
+      batch.update(paymentRef, { status: 'approved' });
 
       // 2. Update user subscription
-      await updateDoc(doc(db, 'users', payment.userId), {
-        subscriptionStatus: payment.plan
-      });
+      const userRef = doc(db, 'users', payment.userId);
+      batch.set(userRef, { 
+        subscriptionStatus: payment.plan,
+        // Fallback fields in case the document is being created for the first time
+        uid: payment.userId,
+        email: payment.email || '',
+        displayName: payment.name || 'User',
+        createdAt: new Date().toISOString()
+      }, { merge: true });
+
+      // Commit the batch
+      await batch.commit();
 
       // 3. Update local state
       setPayments(prev => prev.map(p => p.id === payment.id ? { ...p, status: 'approved' } : p));
     } catch (err) {
-      console.error('Error approving payment:', err);
-      alert('Failed to approve payment');
+      const detailedError = handleFirestoreError(err, OperationType.UPDATE, `payments/${payment.id} and users/${payment.userId}`);
+      setError(detailedError.message);
     } finally {
       setProcessingId(null);
     }
@@ -68,8 +133,8 @@ const Admin: React.FC = () => {
       });
       setPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: 'rejected' } : p));
     } catch (err) {
-      console.error('Error rejecting payment:', err);
-      alert('Failed to reject payment');
+      const detailedError = handleFirestoreError(err, OperationType.UPDATE, `payments/${paymentId}`);
+      setError(detailedError.message);
     } finally {
       setProcessingId(null);
     }
@@ -85,6 +150,16 @@ const Admin: React.FC = () => {
         <h2 className="text-4xl font-bold mb-2">Admin Panel</h2>
         <p className="text-white/50">Manage payment confirmations and user subscriptions.</p>
       </div>
+
+      {error && (
+        <div className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-200 text-sm font-mono break-all">
+          <div className="flex items-center gap-2 mb-2 font-bold">
+            <AlertTriangle className="w-5 h-5" />
+            Permission Error Detected
+          </div>
+          {error}
+        </div>
+      )}
 
       <div className="space-y-6">
         <h3 className="text-2xl font-bold flex items-center gap-2">
@@ -126,9 +201,9 @@ const Admin: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <User className="w-4 h-4 text-white/30" />
-                      <span className="font-bold text-lg">{payment.name}</span>
+                      <span className="font-bold text-lg">{payment.name || 'Anonymous User'}</span>
                     </div>
-                    <div className="text-sm text-white/50 mb-2">{payment.phone}</div>
+                    <div className="text-sm text-white/50 mb-2">{payment.phone || payment.email || 'No contact info'}</div>
                     <div className="flex items-center gap-2">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         payment.plan === 'premium' ? 'bg-secondary text-black' : 'bg-primary text-white'
