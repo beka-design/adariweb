@@ -31,14 +31,14 @@ export const PAYMENT_INFO = {
   plans: {
     basic: {
       name: 'Basic Plan',
-      price: '200 ETB',
+      price: '100 ETB',
       description: 'For one month.',
       groupPayment: false
     },
     premium: {
       name: 'Premium Plan',
-      price: '400 ETB',
-      description: 'Valid until the entrance exam day officially stated by Ministry of Education (more than 4 months).',
+      price: '150 ETB',
+      description: 'Valid until the entrance exam day officially stated by Ministry of Education (more than 2 months).',
       groupPayment: true
     }
   }
