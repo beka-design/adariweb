@@ -16,8 +16,8 @@ const Quiz: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [answers, setAnswers] = useState<{ questionId: string; userAnswer: number; isCorrect: boolean }[]>([]);
-  const [timeLeft, setTimeLeft] = useState(60);
+  const [userAnswers, setUserAnswers] = useState<(number | null)[]>([]);
+  const [timeLeft, setTimeLeft] = useState(180 * 60); // 3 hours in seconds
   const [isFinished, setIsFinished] = useState(false);
   const [score, setScore] = useState(0);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -63,33 +63,41 @@ const Quiz: React.FC = () => {
       filtered = filtered.filter(q => !q.isPremium);
     }
 
-    setQuestions(filtered.sort(() => Math.random() - 0.5));
+    if (filtered.length === 0) {
+      setQuestions([]);
+      setUserAnswers([]);
+    } else {
+      const sorted = filtered.sort(() => Math.random() - 0.5);
+      setQuestions(sorted);
+      setUserAnswers(new Array(sorted.length).fill(null));
+    }
   }, [subject, grade, navigate, userProfile, isProfileLoading]);
 
   const handleNext = useCallback(() => {
-    if (selectedOption === null) return;
-
-    const currentQuestion = questions[currentIndex];
-    const isCorrect = selectedOption === currentQuestion.correct;
-    
-    const newAnswer = {
-      questionId: currentQuestion.id,
-      userAnswer: selectedOption,
-      isCorrect
-    };
-
-    const updatedAnswers = [...answers, newAnswer];
-    setAnswers(updatedAnswers);
-    if (isCorrect) setScore(s => s + 1);
+    const updatedAnswers = [...userAnswers];
+    updatedAnswers[currentIndex] = selectedOption;
+    setUserAnswers(updatedAnswers);
 
     if (currentIndex < questions.length - 1) {
-      setCurrentIndex(i => i + 1);
-      setSelectedOption(null);
-      setTimeLeft(60);
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      setSelectedOption(updatedAnswers[nextIndex]);
     } else {
       finishQuiz(updatedAnswers);
     }
-  }, [currentIndex, questions, selectedOption, answers]);
+  }, [currentIndex, questions, selectedOption, userAnswers]);
+
+  const handlePrevious = useCallback(() => {
+    if (currentIndex > 0) {
+      const updatedAnswers = [...userAnswers];
+      updatedAnswers[currentIndex] = selectedOption;
+      setUserAnswers(updatedAnswers);
+
+      const prevIndex = currentIndex - 1;
+      setCurrentIndex(prevIndex);
+      setSelectedOption(updatedAnswers[prevIndex]);
+    }
+  }, [currentIndex, selectedOption, userAnswers]);
 
   // Timer logic
   useEffect(() => {
@@ -98,40 +106,31 @@ const Quiz: React.FC = () => {
     const timer = setInterval(() => {
       setTimeLeft(t => {
         if (t <= 1) {
-          // Auto-submit if time runs out
-          if (selectedOption === null) {
-            // If no option selected, mark as wrong
-            const currentQuestion = questions[currentIndex];
-            const updatedAnswers = [...answers, {
-              questionId: currentQuestion.id,
-              userAnswer: -1,
-              isCorrect: false
-            }];
-            setAnswers(updatedAnswers);
-            
-            if (currentIndex < questions.length - 1) {
-              setCurrentIndex(i => i + 1);
-              setSelectedOption(null);
-              return 60;
-            } else {
-              finishQuiz(updatedAnswers);
-              return 0;
-            }
-          } else {
-            handleNext();
-            return 60;
-          }
+          clearInterval(timer);
+          finishQuiz(userAnswers);
+          return 0;
         }
         return t - 1;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isFinished, questions.length, currentIndex, selectedOption, handleNext, answers]);
+  }, [isFinished, questions.length, userAnswers]);
 
-  const finishQuiz = async (finalAnswers: any[]) => {
+  const finishQuiz = async (finalUserAnswers: (number | null)[]) => {
+    if (isFinished) return;
     setIsFinished(true);
-    const finalScore = finalAnswers.filter(a => a.isCorrect).length;
+
+    const processedAnswers = questions.map((q, index) => {
+      const userAnswer = finalUserAnswers[index];
+      return {
+        questionId: q.id,
+        userAnswer: userAnswer ?? -1,
+        isCorrect: userAnswer === q.correct
+      };
+    });
+
+    const finalScore = processedAnswers.filter(a => a.isCorrect).length;
     
     if (auth.currentUser) {
       const result: QuizResult = {
@@ -141,7 +140,7 @@ const Quiz: React.FC = () => {
         score: finalScore,
         totalQuestions: questions.length,
         timestamp: new Date().toISOString(),
-        answers: finalAnswers
+        answers: processedAnswers
       };
       
       try {
@@ -209,21 +208,28 @@ const Quiz: React.FC = () => {
     );
   }
 
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
   const currentQuestion = questions[currentIndex];
 
   return (
-    <div className="max-w-4xl mx-auto py-8">
+    <div className="max-w-4xl mx-auto py-8 px-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h2 className="text-2xl font-bold">{subject}</h2>
           <p className="text-white/50">{grade} • {currentQuestion.topicName}</p>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center justify-between md:justify-end gap-6">
           <div className="flex items-center gap-2 text-secondary font-bold">
             <Timer className="w-5 h-5" />
-            <span className={timeLeft < 10 ? 'text-red-500 animate-pulse' : ''}>
-              {timeLeft}s
+            <span className={timeLeft < 60 ? 'text-red-500 animate-pulse' : ''}>
+              {formatTime(timeLeft)}
             </span>
           </div>
           <div className="text-white/50 font-medium">
@@ -280,11 +286,17 @@ const Quiz: React.FC = () => {
             ))}
           </div>
 
-          <div className="mt-12 flex justify-end">
+          <div className="mt-12 flex flex-col sm:flex-row justify-between gap-4">
+            <button
+              onClick={handlePrevious}
+              disabled={currentIndex === 0}
+              className="glass-button-outline px-10 flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed order-2 sm:order-1"
+            >
+              Previous
+            </button>
             <button
               onClick={handleNext}
-              disabled={selectedOption === null}
-              className="glass-button-primary px-10 flex items-center gap-2"
+              className="glass-button-primary px-10 flex items-center justify-center gap-2 order-1 sm:order-2"
             >
               {currentIndex === questions.length - 1 ? 'Finish Quiz' : 'Next Question'}
               <ArrowRight className="w-5 h-5" />
